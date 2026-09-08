@@ -1,0 +1,22 @@
+planning_pipelines:
+  pipeline_names: ["ompl"]
+
+ompl:
+  planning_plugins: ["ompl_interface/OMPLPlanner"]
+  request_adapters:
+    - default_planning_request_adapters/ResolveConstraintFrames
+    - default_planning_request_adapters/ValidateWorkspaceBounds
+    - default_planning_request_adapters/CheckStartStateBounds
+    - default_planning_request_adapters/CheckStartStateCollision
+  response_adapters:
+    - default_planning_response_adapters/AddTimeOptimalParameterization
+    - default_planning_response_adapters/ValidateSolution
+    - default_planning_response_adapters/DisplayMotionPath
+
+plan_request_params:
+  planning_time: 5.0
+  planning_attempts: 5
+  max_velocity_scaling_factor: 0.3
+  max_acceleration_scaling_factor: 0.3
+
+allowed_start_tolerance: 0.0
