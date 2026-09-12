@@ -17,6 +17,40 @@
           <diffuse>0.5 0.35 0.2 1</diffuse>
         </material>
       </visual>
+
+      <!-- Cosmetic place-slot markers (visual-only, no collision) -->
+      <visual name="marker_red">
+        <pose>0.15 -0.1 0.201 0 0 0</pose>
+        <geometry>
+          <box><size>0.05 0.05 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>1 0 0 1</ambient>
+          <diffuse>1 0 0 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="marker_green">
+        <pose>0.15 0.0 0.201 0 0 0</pose>
+        <geometry>
+          <box><size>0.05 0.05 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0 1 0 1</ambient>
+          <diffuse>0 1 0 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="marker_blue">
+        <pose>0.15 0.1 0.201 0 0 0</pose>
+        <geometry>
+          <box><size>0.05 0.05 0.002</size></box>
+        </geometry>
+        <material>
+          <ambient>0 0 1 1</ambient>
+          <diffuse>0 0 1 1</diffuse>
+        </material>
+      </visual>
     </link>
   </model>
 </sdf>
