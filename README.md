@@ -15,14 +15,34 @@ ros2 launch kinova_gen3_7dof_robotiq_2f_85_moveit_config move_group.launch.py
 ros2 launch kinova_gen3_7dof_robotiq_2f_85_moveit_config moveit_rviz.launch.py
 ```
 
-**Terminal 4 — Spawn the cubes:**
+**Terminal 4 — Spawn the table:**
+```bash
+ros2 run ros_gz_sim create -file ~/kinova_ws/src/kinova_scripts/models/simple_table/model.sdf -name my_table -x 0.4 -y 0.0 -z 0.2
+```
+
+**Terminal 5 — Spawn the overhead camera and start the bridge:**
+```bash
+ros2 run ros_gz_sim create -file ~/kinova_ws/src/kinova_scripts/models/overhead_camera/model.sdf -name overhead_camera -x 0.4 -y 0.0 -z 1.5 -R 0 -P 1.5708 -Y 0
+ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=$HOME/kinova_ws/src/kinova_scripts/config/camera_bridge.yaml
+```
+Run these only once per session — running them twice leaves duplicate camera/bridge processes behind, which silently corrupts detector output. Verify before re-running:
+```bash
+ps aux | grep -E "overhead_camera|parameter_bridge" | grep -v grep
+```
+
+**Terminal 6 — Publish the static camera → base_link transform (leave running, required for Stage 3+):**
+```bash
+ros2 run tf2_ros static_transform_publisher --x 0.4 --y 0.0 --z 1.5 --qx 0.7071 --qy -0.7071 --qz 0 --qw 0 --frame-id base_link --child-frame-id overhead_camera/camera_link/overhead_rgbd
+```
+
+**Terminal 7 — Spawn the cubes:**
 ```bash
 ros2 run ros_gz_sim create -file ~/kinova_ws/src/kinova_scripts/models/simple_cube/model.sdf       -name cube_red   -x 0.4 -y 0.1  -z 0.42
 ros2 run ros_gz_sim create -file ~/kinova_ws/src/kinova_scripts/models/simple_cube_green/model.sdf -name cube_green -x 0.4 -y 0.0  -z 0.42
 ros2 run ros_gz_sim create -file ~/kinova_ws/src/kinova_scripts/models/simple_cube_blue/model.sdf  -name cube_blue  -x 0.4 -y -0.1 -z 0.42
 ```
 
-**Terminal 5 — View the live RGB camera feed:**
+**Terminal 8 — View the live RGB camera feed:**
 ```bash
 QT_QPA_PLATFORM=xcb ros2 run rqt_image_view rqt_image_view
 ```
@@ -60,7 +80,7 @@ colcon build --packages-select kinova_scripts
 source install/setup.bash
 ```
 
-**Terminal 6 — Run the color detector node:**
+**Terminal 9 — Run the color detector node:**
 ```bash
 ros2 run kinova_scripts cube_color_detector
 ```

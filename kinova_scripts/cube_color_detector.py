@@ -2,7 +2,7 @@
 """
 cube_color_detector.py
 
-Stage 2 of the pick-and-place vision pipeline.
+Stage 3 of the pick-and-place vision pipeline.
 
 Subscribes to synced RGB, depth, and camera_info topics from the static
 overhead camera. For each of red/green/blue:
@@ -10,21 +10,29 @@ overhead camera. For each of red/green/blue:
   - finds the largest matching contour's centroid (pixel coords)
   - looks up depth at that pixel
   - deprojects (pixel + depth) -> 3D point in the camera's optical frame
-  - publishes PointStamped on /detected_cube/<color>
+  - transforms that point into base_link via tf2, using the static
+    transform published separately (see README) from the validated
+    camera extrinsics:
+        translation: (0.4, 0.0, 1.5)
+        quaternion:  (0.7071, -0.7071, 0, 0)
+  - publishes PoseStamped (orientation identity) on /detected_cube/<color>,
+    now in the base_link frame
 
-Deliberately does NOT transform into base_link -- that's Stage 3, once the
-camera's static mount pose relative to the robot base is known. Points here
-are published directly in the camera_info frame_id.
+Requires a static_transform_publisher (or equivalent) already broadcasting
+base_link -> overhead_camera/camera_link/overhead_rgbd. See README for the
+exact command.
 """
 
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import PointStamped, PoseStamped
 import message_filters
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
+import tf2_ros
+import tf2_geometry_msgs  # noqa: F401  (registers PointStamped transform support)
 
 
 class CubeColorDetector(Node):
@@ -51,12 +59,18 @@ class CubeColorDetector(Node):
         }
 
         self.color_publishers = {
-            color: self.create_publisher(PointStamped, f'/detected_cube/{color}', 10)
+            color: self.create_publisher(PoseStamped, f'/detected_cube/{color}', 10)
             for color in self.color_ranges
         }
 
         # Matches the camera_info frame_id confirmed via `ros2 topic echo`.
         self.frame_id = 'overhead_camera/camera_link/overhead_rgbd'
+        self.target_frame = 'base_link'
+
+        # tf2 buffer/listener to transform camera-frame detections into
+        # base_link, using the static transform published separately.
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         # Minimum contour area (pixels) to accept as a real detection,
         # filtering out stray noise pixels that happen to pass the HSV mask.
@@ -129,10 +143,29 @@ class CubeColorDetector(Node):
             point_msg.point.y = y
             point_msg.point.z = z
 
-            self.color_publishers[color].publish(point_msg)
+            # Transform camera-frame point into base_link via the static TF.
+            try:
+                transformed = self.tf_buffer.transform(
+                    point_msg, self.target_frame, timeout=rclpy.duration.Duration(seconds=0.2))
+            except (tf2_ros.LookupException, tf2_ros.ExtrapolationException,
+                    tf2_ros.ConnectivityException) as e:
+                self.get_logger().warn(
+                    f'{color}: transform to {self.target_frame} failed: {e}')
+                continue
+
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = rgb_msg.header.stamp
+            pose_msg.header.frame_id = self.target_frame
+            pose_msg.pose.position.x = transformed.point.x
+            pose_msg.pose.position.y = transformed.point.y
+            pose_msg.pose.position.z = transformed.point.z
+            pose_msg.pose.orientation.w = 1.0  # identity orientation
+
+            self.color_publishers[color].publish(pose_msg)
             self.get_logger().info(
                 f'{color}: pixel=({u},{v}) depth={z:.3f}m -> '
-                f'point=({x:.3f}, {y:.3f}, {z:.3f}) in {self.frame_id}'
+                f'base_link=({transformed.point.x:.3f}, {transformed.point.y:.3f}, '
+                f'{transformed.point.z:.3f})'
             )
 
 
@@ -145,7 +178,8 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        import os
+        os._exit(0)
 
 
 if __name__ == '__main__':
