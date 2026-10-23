@@ -33,6 +33,8 @@ setup(
             'grasp_isolation_test = kinova_scripts.grasp_isolation_test:main',
             'spawn_cube_collision = kinova_scripts.spawn_cube_collision:main',
             'cube_color_detector = kinova_scripts.cube_color_detector:main',
+            'pick_and_place_demo = kinova_scripts.pick_and_place_demo:main',
+            'pick_and_place_single = kinova_scripts.pick_and_place_single:main' 
         ],
     },
 )

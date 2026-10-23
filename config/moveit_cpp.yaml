@@ -19,4 +19,11 @@ plan_request_params:
   max_velocity_scaling_factor: 0.3
   max_acceleration_scaling_factor: 0.3
 
-allowed_start_tolerance: 0.0
+# Execution monitoring. Defaults are 1.2x expected duration + 0.5 s margin,
+# which short 15 mm steps can easily exceed when the sim stutters.
+trajectory_execution:
+  allowed_execution_duration_scaling: 2.0
+  allowed_goal_duration_margin: 1.0
+  allowed_start_tolerance: 0.01
+  # Uncomment only while debugging:
+  # execution_duration_monitoring: false
