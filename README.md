@@ -44,21 +44,21 @@ flowchart TD
 
     subgraph Perception["Perception Layer"]
         Bridge["ros_gz_bridge (RGB, Depth, CameraInfo)"]
-        TF["Static TF Publisher (base_link -> optical frame)"]
-        Detector["cube_color_detector Node\n• HSV Segmentation\n• Centroid Extraction\n• Depth Deprojection\n• tf2 World Transformation"]
+        TF["Static TF Publisher (base_link to optical frame)"]
+        Detector["cube_color_detector Node<br/>• HSV Segmentation<br/>• Centroid Extraction<br/>• Depth Deprojection<br/>• tf2 World Transformation"]
     end
 
     subgraph Motion_Planning["MoveIt 2 & Execution Layer"]
         MoveGroup["MoveIt 2 move_group / OMPL"]
-        PickNode["pick_and_place Node (MoveItPy)\n• State Sanitization & Joint Wrapping\n• Seeded-IK Stepped Cartesian Moves\n• Gripper Action Controller"]
+        PickNode["pick_and_place Node (MoveItPy)<br/>• State Sanitization & Joint Wrapping<br/>• Seeded-IK Stepped Cartesian Moves<br/>• Gripper Action Controller"]
     end
 
-    GZ_Camera -->|Gazebo Topics| Bridge
-    Bridge -->|/camera/* topics| Detector
-    TF -.->|Transforms| Detector
-    Detector -->|/detected_cube/<color> (PoseStamped)| PickNode
-    PickNode -->|MoveItPy API| MoveGroup
-    MoveGroup -->|Trajectory Execution| GZ_Robot
+    GZ_Camera -->|"Gazebo Topics"| Bridge
+    Bridge -->|"/camera/* topics"| Detector
+    TF -.->|"Transforms"| Detector
+    Detector -->|"/detected_cube/{color} (PoseStamped)"| PickNode
+    PickNode -->|"MoveItPy API"| MoveGroup
+    MoveGroup -->|"Trajectory Execution"| GZ_Robot
 ```
 
 ### Key Features
