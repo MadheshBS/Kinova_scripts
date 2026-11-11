@@ -520,6 +520,31 @@ def main():
                                       label_prefix=label_prefix,
                                       tolerate_blocked_end=tolerate_blocked_end)
 
+    def verify_object_grasped():
+        """
+        Verifies that an object is physically held in the gripper after lifting.
+        Re-asserts Close:
+          - If cube is grasped, fingers stall on the cube (~0.35 - 0.50 rad).
+          - If cube slipped or dropped, fingers close completely to ~0.80 rad.
+        """
+        set_gripper("Close")
+        time.sleep(SETTLE_TIME)
+        gripper_state = get_safe_gripper_state()
+        positions = gripper_state.get_joint_group_positions(GRIPPER_GROUP)
+        knuckle_val = positions[0] if len(positions) > 0 else 0.0
+        logger.info(f"Grip verification: knuckle joint = {knuckle_val:.4f} rad "
+                    f"(expected range for grasped cube: [0.15, 0.65] rad)")
+        if knuckle_val > 0.65:
+            logger.error(f"Grip verification FAILED: Gripper closed fully ({knuckle_val:.3f} rad > 0.65 rad). "
+                         f"Cube slipped or was not lifted!")
+            return False
+        if knuckle_val < 0.15:
+            logger.error(f"Grip verification FAILED: Gripper is open ({knuckle_val:.3f} rad < 0.15 rad). "
+                         f"Cube was not grasped!")
+            return False
+        logger.info(f"Lifting confirmed: Object securely held (knuckle={knuckle_val:.3f} rad).")
+        return True
+
     # --- main sequence ---
     move_home()
     if not set_gripper("Open"):
@@ -561,7 +586,13 @@ def main():
             continue
 
         if not fine_move(px, py, GRASP_Z, px, py, PREGRASP_Z, f"{color}: lift to pregrasp"):
-            logger.error(f"{color}: lift failed, returning home (still gripping).")
+            logger.error(f"{color}: Lifting FAILED: arm failed to lift from table. Returning home.")
+            move_home()
+            continue
+
+        if not verify_object_grasped():
+            logger.error(f"{color}: Lifting FAILED: Cube was not lifted (slipped out of gripper). Returning home.")
+            set_gripper("Open")
             move_home()
             continue
 

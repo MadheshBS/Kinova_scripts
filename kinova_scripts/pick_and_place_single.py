@@ -398,6 +398,31 @@ def main():
                                       label_prefix=label_prefix,
                                       tolerate_blocked_end=tolerate_blocked_end)
 
+    def verify_object_grasped():
+        """
+        Verifies that an object is physically held in the gripper after lifting.
+        Re-asserts Close:
+          - If cube is grasped, fingers stall on the cube (~0.35 - 0.50 rad).
+          - If cube slipped or dropped, fingers close completely to ~0.80 rad.
+        """
+        set_gripper("Close")
+        time.sleep(SETTLE_TIME)
+        gripper_state = get_safe_gripper_state()
+        positions = gripper_state.get_joint_group_positions(GRIPPER_GROUP)
+        knuckle_val = positions[0] if len(positions) > 0 else 0.0
+        logger.info(f"Grip verification: knuckle joint = {knuckle_val:.4f} rad "
+                    f"(expected range for grasped cube: [0.15, 0.65] rad)")
+        if knuckle_val > 0.65:
+            logger.error(f"Grip verification FAILED: Gripper closed fully ({knuckle_val:.3f} rad > 0.65 rad). "
+                         f"Cube slipped or was not lifted!")
+            return False
+        if knuckle_val < 0.15:
+            logger.error(f"Grip verification FAILED: Gripper is open ({knuckle_val:.3f} rad < 0.15 rad). "
+                         f"Cube was not grasped!")
+            return False
+        logger.info(f"Lifting confirmed: Object securely held (knuckle={knuckle_val:.3f} rad).")
+        return True
+
     # --- main sequence ---
     move_home()
     if not set_gripper("Open"):
@@ -416,6 +441,8 @@ def main():
                 f"target slot ({place_x:.2f}, {place_y:.2f}).")
 
     ok = False
+    lift_ok = False
+
     if not move_to_pose(px, py, PREGRASP_Z, f"{color}: pregrasp"):
         logger.error(f"{color}: pregrasp planning failed.")
     elif not fine_move(px, py, PREGRASP_Z, px, py, GRASP_Z, f"{color}: descend to grasp"):
@@ -423,25 +450,35 @@ def main():
     elif not set_gripper("Close"):
         logger.error(f"{color}: gripper close failed (cube NOT grasped).")
     elif not fine_move(px, py, GRASP_Z, px, py, PREGRASP_Z, f"{color}: lift to pregrasp"):
-        logger.error(f"{color}: lift failed (still gripping).")
-    elif not fine_move(px, py, PREGRASP_Z, place_x, place_y, PREGRASP_Z,
-                       f"{color}: transfer to place", max_step=TRANSFER_STEP):
-        logger.error(f"{color}: transfer failed (still gripping).")
-    elif not fine_move(place_x, place_y, PREGRASP_Z, place_x, place_y, place_z,
-                       f"{color}: descend to place", tolerate_blocked_end=True):
-        logger.error(f"{color}: descent to place failed (still gripping).")
+        logger.error(f"{color}: Lifting FAILED: Arm failed to execute vertical lift (overload/trajectory failure). Returning home.")
+    elif not verify_object_grasped():
+        logger.error(f"{color}: Lifting FAILED: Cube was not lifted (slipped out of gripper). Returning home.")
     else:
-        if not set_gripper("Open"):
-            logger.error(f"{color}: gripper Open failed at place location -- cube may still be held.")
-        elif not fine_move(place_x, place_y, place_z, place_x, place_y, PREGRASP_Z,
-                           f"{color}: retreat to pregrasp"):
-            logger.error(f"{color}: retreat failed -- continuing to Home anyway.")
-            ok = True
+        lift_ok = True
+
+    if lift_ok:
+        logger.info(f"{color}: Cube successfully lifted! Proceeding to placing position ({place_x:.2f}, {place_y:.2f}).")
+        if not fine_move(px, py, PREGRASP_Z, place_x, place_y, PREGRASP_Z,
+                         f"{color}: transfer to place", max_step=TRANSFER_STEP):
+            logger.error(f"{color}: transfer failed (still gripping).")
+        elif not fine_move(place_x, place_y, PREGRASP_Z, place_x, place_y, place_z,
+                           f"{color}: descend to place", tolerate_blocked_end=True):
+            logger.error(f"{color}: descent to place failed (still gripping).")
         else:
-            ok = True
+            if not set_gripper("Open"):
+                logger.error(f"{color}: gripper Open failed at place location -- cube may still be held.")
+            elif not fine_move(place_x, place_y, place_z, place_x, place_y, PREGRASP_Z,
+                               f"{color}: retreat to pregrasp"):
+                logger.error(f"{color}: retreat failed -- continuing to Home anyway.")
+                ok = True
+            else:
+                ok = True
+    else:
+        logger.warning(f"{color}: Lifting phase failed -- aborting sequence without transferring to placing position.")
+        set_gripper("Open")
 
     move_home()
-    logger.info("Pick-and-place complete." if ok else "Sequence aborted; arm returned home.")
+    logger.info("Pick-and-place complete." if ok else "Sequence aborted: Lifting failed. Arm returned home.")
     os._exit(0 if ok else 1)
 
 
