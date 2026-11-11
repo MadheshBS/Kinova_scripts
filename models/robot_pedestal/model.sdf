@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <!--
+    robot_pedestal:
+    Industrial mounting pedestal for the Kinova Gen3 robot base.
+    Fills the 30 cm gap between the Gazebo ground plane (z=0.0)
+    and the robot base spawn height (z=0.30).
+    When spawned at z=0.15:
+      - Bottom rests flush on ground at z=0.0
+      - Top mounting plate meets robot base at z=0.30
+  -->
+  <model name="robot_pedestal">
+    <static>true</static>
+    <link name="link">
+      <collision name="collision">
+        <geometry>
+          <cylinder>
+            <radius>0.12</radius>
+            <length>0.30</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <!-- Main vertical pillar -->
+      <visual name="pillar">
+        <geometry>
+          <cylinder>
+            <radius>0.105</radius>
+            <length>0.26</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.22 0.24 0.27 1</ambient>
+          <diffuse>0.22 0.24 0.27 1</diffuse>
+        </material>
+      </visual>
+
+      <!-- Bottom floor flange plate -->
+      <visual name="base_plate">
+        <pose>0 0 -0.14 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.15</radius>
+            <length>0.02</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.15 0.16 0.18 1</ambient>
+          <diffuse>0.15 0.16 0.18 1</diffuse>
+        </material>
+      </visual>
+
+      <!-- Top robot mounting plate -->
+      <visual name="top_plate">
+        <pose>0 0 0.14 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.125</radius>
+            <length>0.02</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.15 0.16 0.18 1</ambient>
+          <diffuse>0.15 0.16 0.18 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

@@ -65,6 +65,13 @@ def generate_launch_description():
         output="screen",
     )
 
+    spawn_pedestal = ExecuteProcess(
+        cmd=["ros2", "run", "ros_gz_sim", "create",
+             "-file", os.path.join(MODELS_DIR, "robot_pedestal", "model.sdf"),
+             "-name", "robot_pedestal", "-x", "0.0", "-y", "0.0", "-z", "0.15"],
+        output="screen",
+    )
+
     spawn_camera = ExecuteProcess(
         cmd=["ros2", "run", "ros_gz_sim", "create",
              "-file", os.path.join(MODELS_DIR, "overhead_camera", "model.sdf"),
@@ -112,7 +119,7 @@ def generate_launch_description():
         kortex_sim,
         TimerAction(period=8.0, actions=[move_group]),
         TimerAction(period=10.0, actions=[moveit_rviz]),
-        TimerAction(period=12.0, actions=[spawn_table]),
+        TimerAction(period=12.0, actions=[spawn_table, spawn_pedestal]),
         TimerAction(period=14.0, actions=[spawn_camera, camera_bridge, static_tf]),
         TimerAction(period=17.0, actions=[spawn_cube]),
         TimerAction(period=19.0, actions=[color_detector]),

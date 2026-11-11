@@ -93,6 +93,7 @@ kinova_scripts/
 │   └── spawn_cube_collision.py   # Adds collision box to MoveIt planning scene
 ├── launch/
 │   ├── full_sim_random_cube_pick.launch.py # All-in-one end-to-end autonomous simulation
+│   ├── full_sim_heavy_cube_pick.launch.py  # All-in-one overload lift-failure test (10 kg cube)
 │   ├── full_sim_random_cube.launch.py      # Simulation staging with one random cube
 │   ├── full_sim.launch.py                  # Simulation staging with 3 fixed cubes (R/G/B)
 │   ├── pick_and_place_demo.launch.py       # Launches multi-cube pick-and-place node
@@ -101,10 +102,12 @@ kinova_scripts/
 │   └── gripper_demo.launch.py              # Launches gripper test node
 └── models/
     ├── overhead_camera/          # SDF model for RGB-D camera sensor
+    ├── robot_pedestal/           # Industrial mounting stand (0.30m) grounding robot to floor
     ├── simple_table/             # SDF table model with color-coded target slots
-    ├── simple_cube/              # 4cm Red cube SDF model
-    ├── simple_cube_green/        # 4cm Green cube SDF model
-    └── simple_cube_blue/         # 4cm Blue cube SDF model
+    ├── simple_cube/              # 4cm Red cube SDF model (0.10 kg)
+    ├── simple_cube_green/        # 4cm Green cube SDF model (0.10 kg)
+    ├── simple_cube_blue/         # 4cm Blue cube SDF model (0.10 kg)
+    └── simple_cube_heavy/        # 4cm Overloaded Red cube SDF model (10.0 kg)
 ```
 
 ---
@@ -266,6 +269,14 @@ To test the manipulator's failure mode when encountering an object that exceeds 
 - **Manual Spawn Command (in any terminal)**:
   ```bash
   ros2 run ros_gz_sim create -file ~/kinova_ws/src/kinova_scripts/models/simple_cube_heavy/model.sdf -name cube_heavy -x 0.4 -y 0.0 -z 0.42
+  ```
+
+#### 7. Robot Mounting Pedestal Stand
+By default, the upstream Kinova simulation bringup spawns the Gen3 robot base at $z = 0.30\text{ m}$. To ensure physical and visual realism without changing coordinate transforms, an industrial cylindrical pedestal model (`models/robot_pedestal/model.sdf`) is automatically spawned beneath the robot base in all full simulation launch files.
+
+- **Manual Spawn Command (in any terminal)**:
+  ```bash
+  ros2 run ros_gz_sim create -file ~/kinova_ws/src/kinova_scripts/models/robot_pedestal/model.sdf -name robot_pedestal -x 0.0 -y 0.0 -z 0.15
   ```
 
 ---
