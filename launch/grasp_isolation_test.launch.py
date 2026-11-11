@@ -10,7 +10,6 @@ def generate_launch_description():
         MoveItConfigsBuilder(
             "gen3", package_name="kinova_gen3_7dof_robotiq_2f_85_moveit_config"
         )
-        .robot_description(file_path="config/gen3.urdf.xacro")
         .robot_description_semantic(file_path="config/gen3.srdf")
         .trajectory_execution(file_path="config/moveit_controllers.yaml")
         .planning_pipelines(pipelines=["ompl"])          # <-- OMPL only, matches yaml above

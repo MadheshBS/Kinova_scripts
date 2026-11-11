@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <!-- 
+    simple_cube_heavy:
+    Overload test cube designed to exceed the Kinova Gen3 payload.
+    - Dimensions: 4cm x 4cm x 4cm (0.04m)
+    - Mass: 10.0 kg (Manipulator payload limit is 4.0 kg, net usable is ~3.1 kg)
+    - Inertia: I = 1/6 * m * s^2 = 1/6 * 10.0 * 0.04^2 = 0.00267 kg*m^2
+    - Color: High-saturation Red (detected by cube_color_detector as Red)
+  -->
+  <model name="simple_cube_heavy">
+    <static>false</static>
+    <link name="link">
+      <inertial>
+        <mass>10.0</mass>
+        <inertia>
+          <ixx>0.00267</ixx><iyy>0.00267</iyy><izz>0.00267</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <box><size>0.04 0.04 0.04</size></box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>1.0</mu2>
+            </ode>
+          </friction>
+          <contact>
+            <ode>
+              <kp>1000000.0</kp>
+              <kd>1.0</kd>
+            </ode>
+          </contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <box><size>0.04 0.04 0.04</size></box>
+        </geometry>
+        <material>
+          <ambient>0.85 0.15 0.15 1</ambient>
+          <diffuse>0.85 0.15 0.15 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

@@ -254,6 +254,20 @@ ros2 run kinova_scripts spawn_cube_collision
   ros2 topic echo /camera/camera_info --once
   ```
 
+#### 6. Payload Overload Failure Test
+To test the manipulator's failure mode when encountering an object that exceeds its rated payload capacity ($4.0\text{ kg}$ rated, $\approx 3.1\text{ kg}$ net usable with Robotiq 2F-85 gripper), a dedicated $10.0\text{ kg}$ cube model (`models/simple_cube_heavy`) is provided:
+
+- **All-in-One Overload Test**:
+  ```bash
+  ros2 launch kinova_scripts full_sim_heavy_cube_pick.launch.py
+  ```
+  *The robot will detect the heavy red cube and attempt to grasp and lift it. Because the $10\text{ kg}$ mass ($F_g \approx 98.1\text{ N}$) exceeds the payload and gripper holding limits, the cube will slip through the fingertips, demonstrating an overloaded lift failure.*
+
+- **Manual Spawn Command (in any terminal)**:
+  ```bash
+  ros2 run ros_gz_sim create -file ~/kinova_ws/src/kinova_scripts/models/simple_cube_heavy/model.sdf -name cube_heavy -x 0.4 -y 0.0 -z 0.42
+  ```
+
 ---
 
 ## Technical Pipeline & Architecture
