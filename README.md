@@ -20,9 +20,13 @@ The system integrates overhead RGB-D depth perception, real-time HSV color segme
   - [Option 3: Modular / Manual Multi-Terminal Workflow](#option-3-modular--manual-multi-terminal-workflow)
   - [Option 4: Standalone Testing & Diagnostic Scripts](#option-4-standalone-testing--diagnostic-scripts)
 - [Technical Pipeline & Architecture](#technical-pipeline--architecture)
+  - [Actuator & Motor Architecture](#actuator--motor-architecture)
+  - [Payload Sizing & Analytical Derivation](#payload-sizing--analytical-derivation)
+  - [3x3 Inertia Tensor Modeling](#3x3-inertia-tensor-modeling)
   - [Perception Pipeline](#perception-pipeline)
   - [Motion Planning & Cartesian Control](#motion-planning--cartesian-control)
   - [Joint Wrapping & State Sanitization](#joint-wrapping--state-sanitization)
+- [Project Documentation & Presentation](#project-documentation--presentation)
 - [Troubleshooting & Tips](#troubleshooting--tips)
 
 ---
@@ -37,9 +41,10 @@ This repository provides nodes, launch files, configurations, and SDF simulation
 flowchart TD
     subgraph Gazebo_Sim["Gazebo Sim & World"]
         GZ_Robot["Kinova Gen3 (7-DoF) + Robotiq 2F-85"]
+        GZ_Pedestal["Industrial Pedestal Stand (h: 0.30m)"]
         GZ_Camera["Overhead RGB-D Camera (x:0.4, y:0, z:1.5)"]
         GZ_Table["Tabletop & Colored Target Slots"]
-        GZ_Cubes["Target Cubes (Red / Green / Blue)"]
+        GZ_Cubes["Target Cubes (Red / Green / Blue / Heavy)"]
     end
 
     subgraph Perception["Perception Layer"]
@@ -50,7 +55,7 @@ flowchart TD
 
     subgraph Motion_Planning["MoveIt 2 & Execution Layer"]
         MoveGroup["MoveIt 2 move_group / OMPL"]
-        PickNode["pick_and_place Node (MoveItPy)<br/>• State Sanitization & Joint Wrapping<br/>• Seeded-IK Stepped Cartesian Moves<br/>• Gripper Action Controller"]
+        PickNode["pick_and_place Node (MoveItPy)<br/>• State Sanitization & Joint Wrapping<br/>• Seeded-IK Stepped Cartesian Moves<br/>• Gripper Knuckle Telemetry & Abort Logic"]
     end
 
     GZ_Camera -->|"Gazebo Topics"| Bridge
@@ -63,6 +68,9 @@ flowchart TD
 
 ### Key Features
 
+- **Modular Joint Actuator Architecture**: Coaxial joint modules integrating frameless Brushless DC (BLDC) torque motors, zero-backlash Harmonic Drive strain wave reducers ($100:1$ and $160:1$), and dual absolute encoders ($14$-bit motor-side $+ 19$-bit joint-side) for sub-arcminute repeatability.
+- **Analytical Payload Derivation & Overload Fault Protection**: Rigorous static moment derivation at worst-case horizontal cantilever extension ($4.0\text{ kg}$ rated, $\approx 3.1\text{ kg}$ net usable). Overload test with a $10.0\text{ kg}$ cube model demonstrates physical fingertip slip and autonomous telemetry-driven return-to-home recovery.
+- **Physical Grounding Pedestal Stand**: Industrial cylindrical mounting pedestal ($h=0.30\text{ m}, r=0.12\text{ m}$) at $(0, 0, 0.15\text{ m})$ rigidly grounding the robot base to the floor plane ($z=0$) in Gazebo without altering calibrated TF transforms or camera coordinates.
 - **RGB-D Vision Perception**: Overhead camera captures synced RGB and depth streams. HSV color thresholding segments Red, Green, and Blue cubes; centroids are deprojected to 3D camera coordinates and transformed into the robot's `base_link` frame via `tf2`.
 - **Seeded-IK Stepped Cartesian Trajectories**: Descents, lifts, and fine horizontal transfers are divided into small, fine Cartesian increments ($15\text{ mm}$ steps) solved with inverse kinematics seeded from the live arm state to maintain branch continuity and avoid unpredictable elbow reconfigurations.
 - **Start State Sanitization**:
@@ -86,11 +94,12 @@ kinova_scripts/
 ├── kinova_scripts/
 │   ├── cube_color_detector.py    # Vision node: HSV mask, depth deprojection, tf2 transform
 │   ├── pick_and_place_demo.py    # Multi-cube sequential color-sorting pick-and-place
-│   ├── pick_and_place_single.py  # Single-cube pick-and-place with marker rejection logic
+│   ├── pick_and_place_single.py  # Single-cube pick-and-place with marker rejection & slip check
 │   ├── grasp_isolation_test.py   # Standalone Cartesian descent & grasp test
 │   ├── pose_goal_demo.py         # MoveItPy Cartesian pose goal demo with joint wrapping
 │   ├── pose_gripper_demo.py      # MoveItPy Robotiq gripper open/close demo
-│   └── spawn_cube_collision.py   # Adds collision box to MoveIt planning scene
+│   ├── spawn_cube_collision.py   # Adds collision box to MoveIt planning scene
+│   └── images_report/            # Academic report (.docx, .md), presentation (.pptx), figures
 ├── launch/
 │   ├── full_sim_random_cube_pick.launch.py # All-in-one end-to-end autonomous simulation
 │   ├── full_sim_heavy_cube_pick.launch.py  # All-in-one overload lift-failure test (10 kg cube)
@@ -283,6 +292,71 @@ By default, the upstream Kinova simulation bringup spawns the Gen3 robot base at
 
 ## Technical Pipeline & Architecture
 
+### Actuator & Motor Architecture
+
+Each of the 7 revolute joints is driven by a self-contained, coaxial robotic joint actuator module integrating four core subsystems:
+1. **Frameless Brushless DC (BLDC) Torque Motors**: Direct stator-in-housing packaging eliminates heavy mechanical shaft couplings, minimizes rotational inertia, and maximizes thermal conduction into the structural aluminum link shells.
+2. **Harmonic Drive Strain Wave Reducers**: Delivers high gear reduction within a compact axial footprint ($100:1$ on Joints 1–4, $160:1$ on Joints 5–7). The elliptical wave generator and flexspline ensure multi-tooth engagement with zero backlash and high torsional rigidity.
+3. **Dual Absolute Encoders**:
+   - **Motor-Side (14-bit magnetic)**: High-bandwidth rotor position feedback for sinusoidal Field-Oriented Control (FOC) current commutation and velocity regulation.
+   - **Joint-Side (19-bit optical)**: Direct measurement of output joint angles post-reduction, eliminating gear deflection, torsional windup, and thermal drift errors.
+4. **Embedded Inverter Drive & FOC**: High-frequency DSP executes distributed current, velocity, and position control loops locally within each joint module.
+
+| Joint Name | Role | Motion Type & Range | Max Velocity | Peak / Rated Torque | Reduction Ratio |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **joint_1** | Base Yaw | Continuous ($-\pi \dots +\pi$) | $1.39\text{ rad/s}$ ($80^\circ/\text{s}$) | $39.0\text{ N}\cdot\text{m}$ | $100:1$ |
+| **joint_2** | Shoulder Pitch | Revolute ($-2.24 \dots +2.24\text{ rad}$) | $1.39\text{ rad/s}$ ($80^\circ/\text{s}$) | $39.0\text{ N}\cdot\text{m}$ | $100:1$ |
+| **joint_3** | Upper Arm Roll | Continuous ($-\pi \dots +\pi$) | $1.39\text{ rad/s}$ ($80^\circ/\text{s}$) | $39.0\text{ N}\cdot\text{m}$ | $100:1$ |
+| **joint_4** | Elbow Pitch | Revolute ($-2.57 \dots +2.57\text{ rad}$) | $1.39\text{ rad/s}$ ($80^\circ/\text{s}$) | $39.0\text{ N}\cdot\text{m}$ | $100:1$ |
+| **joint_5** | Forearm Roll | Continuous ($-\pi \dots +\pi$) | $1.22\text{ rad/s}$ ($70^\circ/\text{s}$) | $9.0\text{ N}\cdot\text{m}$ | $160:1$ |
+| **joint_6** | Wrist Pitch | Revolute ($-2.09 \dots +2.09\text{ rad}$) | $1.22\text{ rad/s}$ ($70^\circ/\text{s}$) | $9.0\text{ N}\cdot\text{m}$ | $160:1$ |
+| **joint_7** | Tool Flange Roll | Continuous ($-\pi \dots +\pi$) | $1.22\text{ rad/s}$ ($70^\circ/\text{s}$) | $9.0\text{ N}\cdot\text{m}$ | $160:1$ |
+| **Gripper** | Robotiq 2F-85 | Stroke $0 \dots 85\text{ mm}$ | $150\text{ mm/s}$ | $30 \dots 235\text{ N}$ grip force | Leadscrew |
+
+![Actuator Architecture Diagram](kinova_scripts/images_report/robotic_joint_actuator_diagram.png)
+
+---
+
+### Payload Sizing & Analytical Derivation
+
+The payload capacity of the serial arm is determined by the static moment equilibrium at the weakest critical joint (Shoulder Joint 2) under the worst-case kinematic cantilever extension ($L_{\max} = 902\text{ mm}$ fully outstretched horizontally):
+
+$$\tau_{\text{motor}} \ge \tau_{\text{arm}} + \tau_{\text{payload}}$$
+
+1. **Arm Self-Weight Moment ($\tau_{\text{arm}}$)**: With combined distal mass $m_{\text{distal}} \approx 4.5\text{ kg}$ and center of mass $r_{\text{CoM}} \approx 0.38\text{ m}$:
+   $$\tau_{\text{arm}} \approx 4.5\text{ kg} \times 9.81\text{ m/s}^2 \times 0.38\text{ m} \approx 16.8\text{ N}\cdot\text{m}$$
+
+2. **Available Joint 2 Torque ($\tau_{\text{available}}$)**: Subtracting self-weight torque from rated capacity ($\tau_{\max} = 39.0\text{ N}\cdot\text{m}$):
+   $$\tau_{\text{available}} = 39.0\text{ N}\cdot\text{m} - 16.8\text{ N}\cdot\text{m} = 22.2\text{ N}\cdot\text{m}$$
+
+3. **Full-Extension Rated Payload ($L_{\max} = 0.902\text{ m}$)** with dynamic safety factor $SF = 1.25$:
+   $$m_{\text{payload, full reach}} = \frac{22.2\text{ N}\cdot\text{m}}{9.81\text{ m/s}^2 \times 0.902\text{ m} \times 1.25} \approx \mathbf{2.0\text{ kg}}$$
+
+4. **Nominal Operating Payload (Mid-Reach $L \approx 0.50\text{ m}$)**:
+   $$m_{\text{payload, mid}} = \frac{22.2\text{ N}\cdot\text{m}}{9.81\text{ m/s}^2 \times 0.50\text{ m} \times 1.1} \approx \mathbf{4.0\text{ kg}}$$
+
+5. **Net Usable Object Payload**: Deducting the Robotiq 2F-85 tare mass ($0.90\text{ kg}$):
+   $$\text{Net Payload} = 4.0\text{ kg} - 0.90\text{ kg} \approx \mathbf{3.1\text{ kg}}$$
+
+#### Overload Failure Mode & Smart Recovery
+To validate how the physical system reacts when subjected to loads far beyond rated capacity, a $10.0\text{ kg}$ heavy cube model is provided (`full_sim_heavy_cube_pick.launch.py`). 
+- **Physics Slip**: The gravitational weight of the heavy cube ($F_g \approx 98.1\text{ N}$) exceeds the friction holding capability of the parallel fingertips under allowable contact forces, causing the cube to slip through the fingers upon vertical lift.
+- **Knuckle Telemetry Check**: The pick-and-place control loop monitors the master knuckle joint angle (`robotiq_85_left_knuckle_joint`). A normal grasp halts finger closure between $[0.15, 0.65]\text{ rad}$. If the fingers close past $0.65\text{ rad}$ (empty grasp due to object slip), the node aborts horizontal transfer and executes a safe return-to-home recovery.
+
+---
+
+### 3x3 Inertia Tensor Modeling
+
+Accurate dynamic simulation and inverse-dynamics control require full 3D rigid body mass property modeling. Each robot link is characterized by a symmetric $3 \times 3$ inertia tensor matrix $\mathbf{I}_{3 \times 3}$ evaluated about its Center of Mass:
+
+$$\mathbf{I} = \begin{bmatrix} I_{xx} & I_{xy} & I_{xz} \\ I_{yx} & I_{yy} & I_{yz} \\ I_{zx} & I_{zy} & I_{zz} \end{bmatrix}$$
+
+- **Principal Moments of Inertia ($I_{xx}, I_{yy}, I_{zz}$)**: Represent rotational resistance along the local principal Cartesian axes ($I_{xx} = \int (y^2 + z^2) dm$).
+- **Products of Inertia ($I_{xy}, I_{xz}, I_{yz}$)**: Cross-coupling inertial terms capturing wobble and centrifugal cross-torques ($I_{xy} = -\int x y \, dm$).
+- **URDF Implementation**: Evaluated directly from SolidWorks CAD material density models (6061-T6 aluminum and carbon fiber) and exported into URDF `<inertial>` tags with exact center-of-mass offsets, ensuring Gazebo's DART physics engine computes realistic centrifugal and Coriolis forces ($\mathbf{C}(\mathbf{q}, \dot{\mathbf{q}})\dot{\mathbf{q}}$).
+
+---
+
 ### Perception Pipeline
 
 1. **Sensor Setup**:
@@ -317,6 +391,23 @@ Simulated execution and floating-point jitter can lead to planning failures if j
   - `joint_6` limit: $[-2.09, 2.09]\text{ rad}$
   - `joint_3` limit: $[-\pi, \pi]\text{ rad}$
   Values outside bounds by even $10^{-5}\text{ rad}$ are clamped slightly inside the limits ($\pm 0.001\text{ rad}$) before passing the start state to MoveIt, preventing `CheckStartStateBounds` failures.
+
+---
+
+## Project Documentation & Presentation
+
+Comprehensive academic reports, technical slides, and high-resolution CAD renders are available in the [`kinova_scripts/images_report/`](file:///home/madhesh/kinova_ws/src/kinova_scripts/kinova_scripts/images_report/) directory:
+
+- **Presentation Deck**:
+  - [`ROS_PPT_Final_1.pptx`](file:///home/madhesh/kinova_ws/src/kinova_scripts/kinova_scripts/images_report/ROS_PPT_Final_1.pptx): 10-slide comprehensive PowerPoint presentation covering SolidWorks CAD design, URDF/XACRO modeling, industrial mounting pedestal stand, Gazebo Harmonic simulation, RGB-D perception pipeline, MoveIt 2 Seeded-IK Cartesian trajectories, Actuator & Motor Architecture, Analytical Payload Derivation & $10\text{ kg}$ Overload Test, and benchmark performance metrics.
+- **Academic Project Report**:
+  - Word Document: [`Kinova_Gen3_Autonomous_Manipulation_Report.docx`](file:///home/madhesh/kinova_ws/src/kinova_scripts/kinova_scripts/images_report/Kinova_Gen3_Autonomous_Manipulation_Report.docx) (34-page formatted academic engineering report complete with tables, formulas, Bonafide certificate, and all 12 figures).
+  - Markdown Document: [`Kinova_Gen3_Autonomous_Manipulation_Report.md`](file:///home/madhesh/kinova_ws/src/kinova_scripts/kinova_scripts/images_report/Kinova_Gen3_Autonomous_Manipulation_Report.md).
+- **Engineering Diagrams & Media**:
+  - [`robotic_joint_actuator_diagram.png`](file:///home/madhesh/kinova_ws/src/kinova_scripts/kinova_scripts/images_report/robotic_joint_actuator_diagram.png): 4-subsystem joint module architecture.
+  - [`robotic_joint_actuator_render.jpg`](file:///home/madhesh/kinova_ws/src/kinova_scripts/kinova_scripts/images_report/robotic_joint_actuator_render.jpg): 3D actuator cutaway render.
+  - [`Screenshot from 2026-11-16 13-35-26.png`](file:///home/madhesh/kinova_ws/src/kinova_scripts/kinova_scripts/images_report/Screenshot%20from%202026-11-16%2013-35-26.png): Complete Gazebo simulation environment with industrial pedestal stand.
+  - [`Screenshot from 2026-11-16 13-35-51.png`](file:///home/madhesh/kinova_ws/src/kinova_scripts/kinova_scripts/images_report/Screenshot%20from%202026-11-16%2013-35-51.png): Close-up perspective of the grounded robot base and pedestal stand.
 
 ---
 
